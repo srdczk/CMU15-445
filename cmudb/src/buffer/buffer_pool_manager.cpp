@@ -46,7 +46,34 @@ BufferPoolManager::~BufferPoolManager() {
  * 4. Update page metadata, read page content from disk file and return page
  * pointer
  */
-Page *BufferPoolManager::FetchPage(page_id_t page_id) { return nullptr; }
+Page *BufferPoolManager::FetchPage(page_id_t page_id) {
+    std::lock_guard<std::mutex> guard(latch_);
+    Page *page = nullptr;
+    if (page_table_->Find(page_id, page)) {
+      ++page->pin_count_;
+      page_table_->Remove(page_id);
+      return page;
+    }
+    if (free_list_->empty()) {
+      if (!replacer_->Size()) return nullptr;
+      replacer_->Victim(page);
+    } else {
+      page = free_list_->front();
+      free_list_->pop_front();
+    }
+    if (!page) return nullptr;
+    if (page->is_dirty_) disk_manager_->WritePage(page->GetPageId(), page->data_);
+
+    // HashTable remove
+    page_table_->Remove(page_id);
+    page_table_->Insert(page_id, page);
+    // Update Metadata
+    disk_manager_->ReadPage(page_id, page->data_);
+    page->pin_count_ = 1;
+    page->is_dirty_ = false;
+    page->page_id_ = page_id;
+    return page;
+}
 
 /*
  * Implementation of unpin page
@@ -55,7 +82,16 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) { return nullptr; }
  * dirty flag of this page
  */
 bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
-  return false;
+    std::lock_guard<std::mutex> guard(latch_);
+    Page *page = nullptr;
+    if (!page_table_->Find(page_id, page)) return false;
+
+    page->is_dirty_ |= is_dirty;
+
+    if (page->pin_count_ <= 0) return false;
+
+    if (!--page->pin_count_) replacer_->Insert(page);
+    return true;
 }
 
 /*
@@ -64,7 +100,15 @@ bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
  * if page is not found in page table, return false
  * NOTE: make sure page_id != INVALID_PAGE_ID
  */
-bool BufferPoolManager::FlushPage(page_id_t page_id) { return false; }
+bool BufferPoolManager::FlushPage(page_id_t page_id) {
+    std::lock_guard<std::mutex> guard(latch_);
+    Page *page = nullptr;
+    page_table_->Find(page_id, page);
+    if (!page || page->page_id_ == INVALID_PAGE_ID) return false;
+    if (page->is_dirty_) disk_manager_->WritePage(page_id, page->data_);
+    page->is_dirty_ = false;
+    return true;
+}
 
 /**
  * User should call this method for deleting a page. This routine will call
@@ -74,7 +118,22 @@ bool BufferPoolManager::FlushPage(page_id_t page_id) { return false; }
  * call disk manager's DeallocatePage() method to delete from disk file. If
  * the page is found within page table, but pin_count != 0, return false
  */
-bool BufferPoolManager::DeletePage(page_id_t page_id) { return false; }
+bool BufferPoolManager::DeletePage(page_id_t page_id) {
+      std::lock_guard<std::mutex> guard(latch_);
+      Page *page = nullptr;
+      page_table_->Find(page_id, page);
+      if (page) {
+        if (page->pin_count_ > 0) return false;
+        replacer_->Erase(page);
+        page_table_->Remove(page_id);
+        page->is_dirty_ = false;
+        page->ResetMemory();
+        page->page_id_ = INVALID_PAGE_ID;
+        free_list_->push_back(page);
+      }
+      disk_manager_->DeallocatePage(page_id);
+      return true;
+}
 
 /**
  * User should call this method if needs to create a new page. This routine
@@ -84,5 +143,27 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) { return false; }
  * update new page's metadata, zero out memory and add corresponding entry
  * into page table. return nullptr if all the pages in pool are pinned
  */
-Page *BufferPoolManager::NewPage(page_id_t &page_id) { return nullptr; }
+Page *BufferPoolManager::NewPage(page_id_t &page_id) {
+        std::lock_guard<std::mutex> guard(latch_);
+        Page *page = nullptr;
+        if (free_list_->empty()) {
+            if (!replacer_->Size()) return nullptr;
+            replacer_->Victim(page);
+        } else {
+            page = free_list_->front();
+            free_list_->pop_front();
+        }
+        if (!page) return nullptr;
+        page_id = disk_manager_->AllocatePage();
+        if (page->is_dirty_) disk_manager_->WritePage(page->GetPageId(), page->data_);
+        page_table_->Remove(page->GetPageId());
+        page_table_->Insert(page_id, page);
+
+        page->page_id_ = page_id;
+        page->ResetMemory();
+        page->is_dirty_ = false;
+        page->pin_count_ = 1;
+        return page;
+    }
 } // namespace cmudb
+
