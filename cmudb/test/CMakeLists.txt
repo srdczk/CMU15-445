@@ -34,11 +34,11 @@ find_program(MEMORYCHECK_COMMAND valgrind REQUIRED)
 # if you want valgrind to print out the syntax to use to suppress a particular
 # memory leak
 set(MEMORYCHECK_COMMAND_OPTIONS
---trace-children=yes
---leak-check=full
---track-origins=yes
---soname-synonyms=somalloc=*jemalloc*
---error-exitcode=1)
+        --trace-children=yes
+        --leak-check=full
+        --track-origins=yes
+        --soname-synonyms=somalloc=*jemalloc*
+        --error-exitcode=1)
 set(MEMORYCHECK_SUPPRESSIONS_FILE ${PROJECT_SOURCE_DIR}/third_party/valgrind/valgrind.supp)
 
 ##################################################################################
@@ -58,15 +58,15 @@ foreach(test_src ${test_srcs} )
 
     # set target properties
     set_target_properties(${test_name}
-        PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test"
-        COMMAND ${test_name}
-    )
+            PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/test"
+            COMMAND ${test_name}
+            )
 
     # add test
     add_test(${test_name} ${MEMORYCHECK_COMMAND} ${MEMORYCHECK_COMMAND_OPTIONS}
-    --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE} ${CMAKE_BINARY_DIR}/test/${test_name}
-    --gtest_color=yes --gtest_output=xml:${CMAKE_BINARY_DIR}/test/unit_${test_name}.xml)
+            --suppressions=${MEMORYCHECK_SUPPRESSIONS_FILE} ${CMAKE_BINARY_DIR}/test/${test_name}
+            --gtest_color=yes --gtest_output=xml:${CMAKE_BINARY_DIR}/test/unit_${test_name}.xml)
     add_test(${test_name} ${CMAKE_BINARY_DIR}/test/${test_name} --gtest_color=yes
             --gtest_output=xml:${CMAKE_BINARY_DIR}/test/${test_name}.xml)
 

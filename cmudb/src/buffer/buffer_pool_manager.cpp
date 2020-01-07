@@ -51,7 +51,7 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
     Page *page = nullptr;
     if (page_table_->Find(page_id, page)) {
       ++page->pin_count_;
-      page_table_->Remove(page_id);
+      replacer_->Erase(page);
       return page;
     }
     if (free_list_->empty()) {
@@ -65,7 +65,8 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
     if (page->is_dirty_) disk_manager_->WritePage(page->GetPageId(), page->data_);
 
     // HashTable remove
-    page_table_->Remove(page_id);
+    // 移除的 是 page原来的id
+    page_table_->Remove(page->GetPageId());
     page_table_->Insert(page_id, page);
     // Update Metadata
     disk_manager_->ReadPage(page_id, page->data_);

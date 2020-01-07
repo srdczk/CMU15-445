@@ -84,6 +84,7 @@ void DiskManager::ReadPage(page_id_t page_id, char *page_data) {
   int offset = page_id * PAGE_SIZE;
   // check if read beyond file length
   if (offset > GetFileSize(file_name_)) {
+//    std::cout << "NIMASILE:" << offset << "\n";
     LOG_DEBUG("I/O error while reading");
     // std::cerr << "I/O error while reading" << std::endl;
   } else {
