@@ -67,7 +67,6 @@ ValueType
 B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key,
                                        const KeyComparator &comparator) const {
     if (GetSize() < 2) return array[0].second;
-    // 判断边界
     if (comparator(array[1].first, key) > 0) return array[0].second;
     if (comparator(key, array[GetSize() - 1].first) >= 0) return array[GetSize() - 1].second;
     int left = 1, right = GetSize() - 1, lastPos = -1;
@@ -98,7 +97,6 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PopulateNewRoot(
     array[0].second = old_value;
     array[1].second = new_value;
     SetSize(2);
-
 }
 /*
  * Insert new_key & new_value pair right after the pair with its value ==
@@ -110,7 +108,6 @@ int B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertNodeAfter(
     const ValueType &old_value, const KeyType &new_key,
     const ValueType &new_value) {
     int insert = ValueIndex(old_value);
-
     std::copy_backward(array + insert + 1, array + GetSize(), array + GetSize() + 1);
     array[insert + 1].first = new_key;
     array[insert + 1].second = new_value;
@@ -128,7 +125,7 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveHalfTo(
     BPlusTreeInternalPage *recipient,
     BufferPoolManager *buffer_pool_manager) {
-    int size = GetSize() / 2;
+    int size = (GetSize() + 1) / 2;
     std::copy(array + size, array + GetSize(), recipient->array);
     SetSize(size);
     recipient->SetSize(GetMaxSize() + 1 - size);

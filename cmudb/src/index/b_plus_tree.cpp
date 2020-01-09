@@ -333,44 +333,7 @@ void BPLUSTREE_TYPE::UpdateRootPageId(int insert_record) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 std::string BPLUSTREE_TYPE::ToString(bool verbose) {
-  if (IsEmpty()) {
     return "Empty tree";
-  }
-  std::queue<BPlusTreePage *> todo, tmp;
-  std::stringstream tree;
-  auto node = reinterpret_cast<BPlusTreePage *>(
-          buffer_pool_manager_->FetchPage(root_page_id_));
-  if (node == nullptr) {
-    throw Exception(EXCEPTION_TYPE_INDEX,
-                    "all page are pinned while printing");
-  }
-  todo.push(node);
-  bool first = true;
-  while (!todo.empty()) {
-    node = todo.front();
-    if (first) {
-      first = false;
-      tree << "| ";
-    }
-    // leaf page, print all key-value pairs
-    if (node->IsLeafPage()) {
-      auto page = reinterpret_cast<BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *>(node);
-      tree << page->ToString(verbose) <<"("<<node->GetPageId()<< ")| ";
-    } else {
-      auto page = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(node);
-      tree << page->ToString(verbose) <<"("<<node->GetPageId()<< ")| ";
-      page->QueueUpChildren(&tmp, buffer_pool_manager_);
-    }
-    todo.pop();
-    if (todo.empty() && !tmp.empty()) {
-      todo.swap(tmp);
-      tree << '\n';
-      first = true;
-    }
-    // unpin node when we are done
-    buffer_pool_manager_->UnpinPage(node->GetPageId(), false);
-  }
-  return tree.str();
 }
 
 /*
