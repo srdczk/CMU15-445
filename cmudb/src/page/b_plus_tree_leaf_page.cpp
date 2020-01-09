@@ -21,13 +21,13 @@ namespace cmudb {
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id) {
-  SetSize(0);
   SetPageType(IndexPageType::LEAF_PAGE);
+  SetSize(0);
+//  assert(sizeof(BPlusTreeLeafPage) == 28);
   SetPageId(page_id);
   SetParentPageId(parent_id);
-  // 设置NextPageId
   SetNextPageId(INVALID_PAGE_ID);
-  SetMaxSize((PAGE_SIZE - sizeof(BPlusTreeLeafPage)) / (sizeof(KeyType) + sizeof(ValueType)));
+  SetMaxSize((PAGE_SIZE - sizeof(BPlusTreeLeafPage))/(sizeof(KeyType) + sizeof(ValueType)) - 1); //minus 1 for insert first then split
 }
 
 /**
@@ -37,7 +37,7 @@ INDEX_TEMPLATE_ARGUMENTS
 page_id_t B_PLUS_TREE_LEAF_PAGE_TYPE::GetNextPageId() const { return next_page_id_; }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) { next_page_id_ = next_page_id; }
+void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) {next_page_id_ = next_page_id;}
 
 /**
  * Helper method to find the first index i so that array[i].first >= key
@@ -46,7 +46,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) { next_pa
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::KeyIndex(
     const KeyType &key, const KeyComparator &comparator) const {
-    if (!GetSize()) return 0;
+    // 寻找 第一个 >= 的点
     if (comparator(array[0].first, key) >= 0) return 0;
     if (comparator(key, array[GetSize() - 1].first) > 0) return GetSize();
     int left = 0, right = GetSize() - 1, lastPos = -1;
@@ -85,7 +85,8 @@ INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key,
                                        const ValueType &value,
                                        const KeyComparator &comparator) {
-    int insert = KeyIndex(key, comparator);
+    // 找到应该插入的 位置
+    int insert = KeyIndex(key,comparator);
     std::copy_backward(array + insert, array + GetSize(), array + GetSize() + 1);
     array[insert].first = key;
     array[insert].second = value;
@@ -106,7 +107,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveHalfTo(
     int size = GetSize() / 2;
     std::copy(array + size, array + GetSize(), recipient->array);
     SetSize(size);
-    recipient->SetSize(GetMaxSize() - size);
+    recipient->SetSize(GetMaxSize() + 1 - size);
     recipient->SetNextPageId(GetNextPageId());
     SetNextPageId(recipient->GetPageId());
 }
@@ -125,12 +126,14 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyHalfFrom(MappingType *items, int size) {}
 INDEX_TEMPLATE_ARGUMENTS
 bool B_PLUS_TREE_LEAF_PAGE_TYPE::Lookup(const KeyType &key, ValueType &value,
                                         const KeyComparator &comparator) const {
-    // 查找 是否存在
-    int index = KeyIndex(key, comparator);
-    if (!(index >= 0 && index < GetSize())) return false;
-    if (comparator(array[index].first, key)) return false;
-    value = array[index].second;
-    return true;
+
+  int index = KeyIndex(key,comparator);
+  if (!(index >= 0 && index < GetSize())) return false;
+  if (!comparator(array[index].first, key)) {
+      value = array[index].second;
+      return true;
+  }
+  return false;
 }
 
 /*****************************************************************************

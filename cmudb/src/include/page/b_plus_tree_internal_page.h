@@ -26,6 +26,7 @@ namespace cmudb {
   BPlusTreeInternalPage<KeyType, ValueType, KeyComparator>
 
 #define B_PLUS_TREE_INTERNAL_PAGE  BPlusTreeInternalPage <KeyType, page_id_t, KeyComparator>
+  
 INDEX_TEMPLATE_ARGUMENTS
 class BPlusTreeInternalPage : public BPlusTreePage {
 public:

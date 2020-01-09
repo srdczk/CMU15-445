@@ -19,14 +19,11 @@ namespace cmudb {
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id,
                                           page_id_t parent_id) {
-  // 设置 page_id_, parent_id_, 以及 max_size_;
   SetPageType(IndexPageType::INTERNAL_PAGE);
-  // 初始化 时候
   SetSize(0);
   SetPageId(page_id);
-  SetPageId(parent_id);
-  // 最大 的Size () / MapIndex
-  SetMaxSize((PAGE_SIZE - sizeof(BPlusTreeInternalPage)) / (sizeof(KeyType) + sizeof(ValueType)));
+  SetParentPageId(parent_id);
+  SetMaxSize((PAGE_SIZE- sizeof(BPlusTreeInternalPage))/(sizeof(KeyType) + sizeof(ValueType)) - 1); //minus 1 for first invalid key
 }
 /*
  * Helper method to get/set the key associated with input "index"(a.k.a
@@ -44,10 +41,10 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) { a
  */
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const {
-  for (int i = 0; i < GetSize(); ++i) {
-    if (array[i].second == value) return i;
-  }
-  return -1;
+    for (int i = 0; i < GetSize(); ++i) {
+        if (array[i].second == value) return i;
+    }
+    return -1;
 }
 
 /*
@@ -70,19 +67,18 @@ ValueType
 B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key,
                                        const KeyComparator &comparator) const {
     if (GetSize() < 2) return array[0].second;
-    if (comparator(array[0].first, key) > 0) return array[0].second;
-    if (comparator(key, array[GetSize() - 2].first) >= 0) return array[GetSize() - 1].second;
-    // 一定 有 > 的
-    int left = 0, right = GetSize() - 2, lastPos = -1;
+    // 判断边界
+    if (comparator(array[1].first, key) > 0) return array[0].second;
+    if (comparator(key, array[GetSize() - 1].first) >= 0) return array[GetSize() - 1].second;
+    int left = 1, right = GetSize() - 1, lastPos = -1;
     while (left <= right) {
         int mid = left + ((right - left) >> 1);
         if (comparator(array[mid].first, key) > 0) {
-            right = mid - 1;
             lastPos = mid;
+            right = mid - 1;
         } else left = mid + 1;
     }
-    assert(lastPos != -1);
-    return array[lastPos].second;
+    return array[lastPos - 1].second;
 }
 
 /*****************************************************************************
@@ -98,11 +94,11 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PopulateNewRoot(
     const ValueType &old_value, const KeyType &new_key,
     const ValueType &new_value) {
-//    std::cout << new_key << " new_key";
-    array[0].first = new_key;
+    array[1].first = new_key;
     array[0].second = old_value;
     array[1].second = new_value;
     SetSize(2);
+
 }
 /*
  * Insert new_key & new_value pair right after the pair with its value ==
@@ -114,15 +110,11 @@ int B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertNodeAfter(
     const ValueType &old_value, const KeyType &new_key,
     const ValueType &new_value) {
     int insert = ValueIndex(old_value);
-    int size = GetSize();
-    // 当 size == 39 的 时候 <--->
-    for (int i = std::min(GetMaxSize() - 1, size); i > insert; --i) {
-        array[i].first = array[i - 1].first;
-        array[i].second = array[i - 1].second;
-    }
-    array[insert].first = new_key;
+
+    std::copy_backward(array + insert + 1, array + GetSize(), array + GetSize() + 1);
+    array[insert + 1].first = new_key;
     array[insert + 1].second = new_value;
-    SetSize(GetSize() + 1);
+    IncreaseSize(1);
     return GetSize();
 }
 
@@ -136,18 +128,12 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveHalfTo(
     BPlusTreeInternalPage *recipient,
     BufferPoolManager *buffer_pool_manager) {
-    // child 全部 要 换 father
-    // 前 半部分大小
-    std::cout << "PPPP\n";
-    int rSize = GetSize();
-    int size = (GetSize() + 1) / 2;
+    int size = GetSize() / 2;
     std::copy(array + size, array + GetSize(), recipient->array);
     SetSize(size);
-    recipient->SetSize(rSize - size);
+    recipient->SetSize(GetMaxSize() + 1 - size);
     for (int i = 0; i < recipient->GetSize(); ++i) {
         Page *page = buffer_pool_manager->FetchPage(recipient->array[i].second);
-        // 换成 BPlusTreePage
-        // 不能直接转成 Internal Type
         BPlusTreePage *child = reinterpret_cast<BPlusTreePage *>(page->GetData());
         child->SetParentPageId(recipient->GetPageId());
         buffer_pool_manager->UnpinPage(child->GetPageId(), true);
@@ -252,23 +238,21 @@ std::string B_PLUS_TREE_INTERNAL_PAGE_TYPE::ToString(bool verbose) const {
        << "]<" << GetSize() << "> ";
   }
 
-//  int entry = verbose ? 0 : 1;
-//  int end = GetSize();
-//  bool first = true;
-//  while (entry < end) {
-//    if (first) {
-//      first = false;
-//    } else {
-//      os << " ";
-//    }
-//    os << std::dec << array[entry].first.ToString();
-//    if (verbose) {
-//      os << "(" << array[entry].second << ")";
-//    }
-//    ++entry;
-    for (int i = 0; i < GetSize(); ++i) {
-        os << array[i].first.ToString() << " ";
+  int entry = verbose ? 0 : 1;
+  int end = GetSize();
+  bool first = true;
+  while (entry < end) {
+    if (first) {
+      first = false;
+    } else {
+      os << " ";
     }
+    os << std::dec << array[entry].first.ToString();
+    if (verbose) {
+      os << "(" << array[entry].second << ")";
+    }
+    ++entry;
+  }
   return os.str();
 }
 
