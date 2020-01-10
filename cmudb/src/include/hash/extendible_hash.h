@@ -18,7 +18,6 @@
 
 #include "hash/hash_table.h"
 
-using namespace std;
 
 namespace cmudb {
 

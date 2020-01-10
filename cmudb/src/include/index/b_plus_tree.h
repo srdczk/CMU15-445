@@ -63,8 +63,6 @@ public:
                                            bool leftMost = false);
 
 private:
-  BPlusTreePage *FetchPage(page_id_t page_id);
-  
   void StartNewTree(const KeyType &key, const ValueType &value);
 
   bool InsertIntoLeaf(const KeyType &key, const ValueType &value,

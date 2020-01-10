@@ -23,7 +23,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id,
   SetSize(0);
   SetPageId(page_id);
   SetParentPageId(parent_id);
-  SetMaxSize((PAGE_SIZE- sizeof(BPlusTreeInternalPage))/(sizeof(KeyType) + sizeof(ValueType)) - 1); //minus 1 for first invalid key
+  SetMaxSize((PAGE_SIZE - sizeof(BPlusTreeInternalPage)) / (sizeof(KeyType) + sizeof(ValueType)) - 1);
 }
 /*
  * Helper method to get/set the key associated with input "index"(a.k.a
@@ -42,11 +42,10 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) { a
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueIndex(const ValueType &value) const {
     for (int i = 0; i < GetSize(); ++i) {
-        if (array[i].second == value) return i;
+        if (value == ValueAt(i)) return i;
     }
     return -1;
 }
-
 /*
  * Helper method to get the value associated with input "index"(a.k.a array
  * offset)
@@ -67,8 +66,8 @@ ValueType
 B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key,
                                        const KeyComparator &comparator) const {
     if (GetSize() < 2) return array[0].second;
-    if (comparator(array[0].first, key) > 0) return array[0].second;
-    if (comparator(key, array[GetSize() - 2].first) >= 0) return array[GetSize() - 1].second;
+    if (comparator(array[0].first, key) > 0) return ValueAt(0);
+    if (comparator(key, array[GetSize() - 2].first) >= 0) return ValueAt(GetSize() - 1);
     int left = 0, right = GetSize() - 2, lastPos = -1;
     while (left <= right) {
         int mid = left + ((right - left) >> 1);
@@ -77,7 +76,7 @@ B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key,
             right = mid - 1;
         } else left = mid + 1;
     }
-    return array[lastPos].second;
+    return ValueAt(lastPos);
 }
 
 /*****************************************************************************
@@ -130,7 +129,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveHalfTo(
     SetSize(size);
     recipient->SetSize(GetMaxSize() + 1 - size);
     for (int i = 0; i < recipient->GetSize(); ++i) {
-        Page *page = buffer_pool_manager->FetchPage(recipient->array[i].second);
+        Page *page = buffer_pool_manager->FetchPage(recipient->ValueAt(i));
         BPlusTreePage *child = reinterpret_cast<BPlusTreePage *>(page->GetData());
         child->SetParentPageId(recipient->GetPageId());
         buffer_pool_manager->UnpinPage(child->GetPageId(), true);
@@ -235,7 +234,7 @@ std::string B_PLUS_TREE_INTERNAL_PAGE_TYPE::ToString(bool verbose) const {
        << "]<" << GetSize() << "> ";
   }
 
-  int entry = 0;
+  int entry = verbose ? 0 : 0;
   int end = GetSize() - 1;
   bool first = true;
   while (entry < end) {
