@@ -175,7 +175,7 @@ TEST(BPlusTreeTests, InsertTest2) {
         index_key.SetFromInteger(key);
         tree.Insert(index_key, rid, transaction);
       }
-//        std::cout << tree.ToString() << "\n";
+    //  std::cout << tree.ToString() << "\n";
       std::vector<RID> rids;
       for (auto key : keys) {
         rids.clear();
@@ -203,8 +203,6 @@ TEST(BPlusTreeTests, InsertTest2) {
     }
 
 TEST(BPlusTreeInsertTests, InsertReverse) {
-  remove("test.db");
-  remove("test.log");
   // create KeyComparator and index schema
   Schema *key_schema = ParseCreateStatement("a bigint");
   GenericComparator<16> comparator(key_schema);
@@ -224,9 +222,9 @@ TEST(BPlusTreeInsertTests, InsertReverse) {
   auto header_page = bpm->NewPage(page_id);
   (void) header_page;
 
-  int scale = 1000;
+  int scale = 100000;
   std::vector<int64_t> keys;
-  for (int i = scale - 1; i >= 0; i--) {
+  for (int i = scale - 1; i > -1; --i) {
     keys.push_back(i + 1);
   }
   for (auto key : keys) {
@@ -237,7 +235,7 @@ TEST(BPlusTreeInsertTests, InsertReverse) {
     tree.Insert(index_key, rid, transaction);
 //    LOG_INFO("\n%s", tree.ToString(false).c_str());
   }
-
+//  std::cout << tree.ToString() << std::endl;
   // check all value is in the tree
   std::vector<RID> rids;
   for (auto key : keys) {

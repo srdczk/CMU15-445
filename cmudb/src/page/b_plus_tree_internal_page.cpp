@@ -67,9 +67,9 @@ ValueType
 B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key,
                                        const KeyComparator &comparator) const {
     if (GetSize() < 2) return array[0].second;
-    if (comparator(array[1].first, key) > 0) return array[0].second;
-    if (comparator(key, array[GetSize() - 1].first) >= 0) return array[GetSize() - 1].second;
-    int left = 1, right = GetSize() - 1, lastPos = -1;
+    if (comparator(array[0].first, key) > 0) return array[0].second;
+    if (comparator(key, array[GetSize() - 2].first) >= 0) return array[GetSize() - 1].second;
+    int left = 0, right = GetSize() - 2, lastPos = -1;
     while (left <= right) {
         int mid = left + ((right - left) >> 1);
         if (comparator(array[mid].first, key) > 0) {
@@ -77,7 +77,7 @@ B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key,
             right = mid - 1;
         } else left = mid + 1;
     }
-    return array[lastPos - 1].second;
+    return array[lastPos].second;
 }
 
 /*****************************************************************************
@@ -93,7 +93,7 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::PopulateNewRoot(
     const ValueType &old_value, const KeyType &new_key,
     const ValueType &new_value) {
-    array[1].first = new_key;
+    array[0].first = new_key;
     array[0].second = old_value;
     array[1].second = new_value;
     SetSize(2);
@@ -108,8 +108,8 @@ int B_PLUS_TREE_INTERNAL_PAGE_TYPE::InsertNodeAfter(
     const ValueType &old_value, const KeyType &new_key,
     const ValueType &new_value) {
     int insert = ValueIndex(old_value);
-    std::copy_backward(array + insert + 1, array + GetSize(), array + GetSize() + 1);
-    array[insert + 1].first = new_key;
+    std::copy_backward(array + insert, array + GetSize(), array + GetSize() + 1);
+    array[insert].first = new_key;
     array[insert + 1].second = new_value;
     IncreaseSize(1);
     return GetSize();
@@ -235,8 +235,8 @@ std::string B_PLUS_TREE_INTERNAL_PAGE_TYPE::ToString(bool verbose) const {
        << "]<" << GetSize() << "> ";
   }
 
-  int entry = verbose ? 0 : 1;
-  int end = GetSize();
+  int entry = 0;
+  int end = GetSize() - 1;
   bool first = true;
   while (entry < end) {
     if (first) {
