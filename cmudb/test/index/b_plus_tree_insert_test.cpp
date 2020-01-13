@@ -291,7 +291,4 @@ TEST(BPlusTreeInsertTests, InsertReverse) {
   remove("test.db");
   remove("test.log");
 }
-
-
-
-} // namespace cmudb
+}
