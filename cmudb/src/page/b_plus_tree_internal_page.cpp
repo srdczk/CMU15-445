@@ -151,7 +151,15 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyHalfFrom(
  * NOTE: store key&value pair continuously after deletion
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(int index) {}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(int index) {
+
+    for (int i = index - 1; i < GetSize() - 1; ++i) {
+        array[i].first = array[i + 1].first;
+        if (i != index - 1) array[i].second = array[i + 1].second;
+    }
+
+    IncreaseSize(-1);
+}
 
 /*
  * Remove the only key & value pair in internal page and return the value
@@ -159,7 +167,8 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(int index) {}
  */
 INDEX_TEMPLATE_ARGUMENTS
 ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::RemoveAndReturnOnlyChild() {
-  return INVALID_PAGE_ID;
+    SetSize(0);
+    return ValueAt(0);
 }
 /*****************************************************************************
  * MERGE
@@ -171,7 +180,19 @@ ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::RemoveAndReturnOnlyChild() {
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveAllTo(
     BPlusTreeInternalPage *recipient, int index_in_parent,
-    BufferPoolManager *buffer_pool_manager) {}
+    BufferPoolManager *buffer_pool_manager) {
+    std::copy(array, array + GetSize(), recipient->array + recipient->GetSize());
+    // change child's father
+    for (int i = 0; i < GetSize(); ++i) {
+        BPlusTreePage *child = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(recipient->ValueAt(recipient->GetSize() + i))->GetData());
+        child->SetParentPageId(recipient->GetPageId());
+        buffer_pool_manager->UnpinPage(child->GetPageId(), true);
+    }
+    recipient->IncreaseSize(GetSize());
+    SetSize(0);
+    buffer_pool_manager->UnpinPage(recipient->GetPageId(), true);
+    buffer_pool_manager->UnpinPage(GetPageId(), true);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyAllFrom(
@@ -187,11 +208,27 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyAllFrom(
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveFirstToEndOf(
     BPlusTreeInternalPage *recipient,
-    BufferPoolManager *buffer_pool_manager) {}
+    BufferPoolManager *buffer_pool_manager) {
+    MappingType pair{array[0].first, array[0].second};
+    std::copy(array + 1, array + GetSize(), array);
+    IncreaseSize(-1);
+    recipient->CopyLastFrom(pair, buffer_pool_manager);
+    // set child's parent
+    BPlusTreePage *child = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(pair.second)->GetData());
+    child->SetParentPageId(recipient->GetPageId());
+    buffer_pool_manager->UnpinPage(child->GetPageId(), true);
+    BPlusTreeInternalPage *parent = reinterpret_cast<BPlusTreeInternalPage *>(buffer_pool_manager->FetchPage(GetParentPageId())->GetData());
+    parent->SetKeyAt(0, array[0].first);
+    buffer_pool_manager->UnpinPage(parent->GetPageId(), true);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyLastFrom(
-    const MappingType &pair, BufferPoolManager *buffer_pool_manager) {}
+    const MappingType &pair, BufferPoolManager *buffer_pool_manager) {
+    array[GetSize()].first = pair.first;
+    array[GetSize()].second = pair.second;
+    IncreaseSize(1);
+}
 
 /*
  * Remove the last key & value pair from this page to head of "recipient"
@@ -200,12 +237,27 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyLastFrom(
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveLastToFrontOf(
     BPlusTreeInternalPage *recipient, int parent_index,
-    BufferPoolManager *buffer_pool_manager) {}
+    BufferPoolManager *buffer_pool_manager) {
+    MappingType pair{array[GetSize() - 1].first, array[GetSize() - 1].second};
+    IncreaseSize(-1);
+    recipient->CopyFirstFrom(pair, parent_index, buffer_pool_manager);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyFirstFrom(
     const MappingType &pair, int parent_index,
-    BufferPoolManager *buffer_pool_manager) {}
+    BufferPoolManager *buffer_pool_manager) {
+    std::copy_backward(array, array + GetSize(), array + GetSize() + 1);
+    IncreaseSize(1);
+    array[0].first = pair.first;
+    array[0].second = pair.second;
+    BPlusTreePage *child = reinterpret_cast<BPlusTreePage *>(buffer_pool_manager->FetchPage(ValueAt(0))->GetData());
+    child->SetParentPageId(GetPageId());
+    buffer_pool_manager->UnpinPage(child->GetPageId(), true);
+    B_PLUS_TREE_INTERNAL_PAGE *parent = reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE  *>(buffer_pool_manager->FetchPage(GetParentPageId())->GetData());
+    parent->SetKeyAt(parent_index - 1, array[0].first);
+    buffer_pool_manager->UnpinPage(parent->GetPageId(), true);
+}
 
 /*****************************************************************************
  * DEBUG

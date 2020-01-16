@@ -380,9 +380,16 @@ TEST(BPlusTreeTests, ScaleTest) {
     current_key = current_key + 1;
     size = size + 1;
   }
-
   EXPECT_EQ(size, 100);
-
+  remove_keys.clear();
+  for (int64_t i = 9900; i < scale; ++i) {
+      remove_keys.push_back(i);
+  }
+  for (auto key : remove_keys) {
+      index_key.SetFromInteger(key);
+      tree.Remove(index_key, transaction);
+  }
+  EXPECT_EQ(true, tree.IsEmpty());
   bpm->UnpinPage(HEADER_PAGE_ID, true);
   delete transaction;
   delete disk_manager;

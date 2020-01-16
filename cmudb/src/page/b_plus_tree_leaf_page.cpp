@@ -6,6 +6,7 @@
 
 #include "common/exception.h"
 #include "common/rid.h"
+#include "page/b_plus_tree_internal_page.h"
 #include "page/b_plus_tree_leaf_page.h"
 
 namespace cmudb {
@@ -147,7 +148,12 @@ bool B_PLUS_TREE_LEAF_PAGE_TYPE::Lookup(const KeyType &key, ValueType &value,
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAndDeleteRecord(
     const KeyType &key, const KeyComparator &comparator) {
-  return 0;
+    int index = KeyIndex(key, comparator);
+    if (!(index > -1 && index < GetSize())) return -1;
+    if (comparator(key, KeyAt(index))) return -1;
+    std::copy(array + index + 1, array + GetSize(), array + index);
+    IncreaseSize(-1);
+    return 0;
 }
 
 /*****************************************************************************
@@ -159,7 +165,13 @@ int B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAndDeleteRecord(
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveAllTo(BPlusTreeLeafPage *recipient,
-                                           int, BufferPoolManager *) {}
+                                           int, BufferPoolManager *) {
+    std::copy(array, array + GetSize(), recipient->array + recipient->GetSize());
+    recipient->IncreaseSize(GetSize());
+    SetSize(0);
+    recipient->SetNextPageId(GetNextPageId());
+    SetNextPageId(INVALID_PAGE_ID);
+}
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyAllFrom(MappingType *items, int size) {}
 
@@ -173,10 +185,22 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyAllFrom(MappingType *items, int size) {}
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveFirstToEndOf(
     BPlusTreeLeafPage *recipient,
-    BufferPoolManager *buffer_pool_manager) {}
+    BufferPoolManager *buffer_pool_manager) {
+    MappingType pair{array[0].first, array[0].second};
+    std::copy(array + 1, array + GetSize(), array);
+    IncreaseSize(-1);
+    recipient->CopyLastFrom(pair);
+    B_PLUS_TREE_INTERNAL_PAGE *parent = reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE *>(buffer_pool_manager->FetchPage(GetParentPageId())->GetData());
+    parent->SetKeyAt(0, array[0].first);
+    buffer_pool_manager->UnpinPage(parent->GetPageId(), true);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyLastFrom(const MappingType &item) {}
+void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyLastFrom(const MappingType &item) {
+    array[GetSize()].first = item.first;
+    array[GetSize()].second = item.second;
+    IncreaseSize(1);
+}
 /*
  * Remove the last key & value pair from this page to "recipient" page, then
  * update relavent key & value pair in its parent page.
@@ -184,12 +208,24 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyLastFrom(const MappingType &item) {}
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveLastToFrontOf(
     BPlusTreeLeafPage *recipient, int parentIndex,
-    BufferPoolManager *buffer_pool_manager) {}
+    BufferPoolManager *buffer_pool_manager) {
+    MappingType pair{array[GetSize() - 1].first, array[GetSize() - 1].second};
+    IncreaseSize(-1);
+    recipient->CopyFirstFrom(pair, parentIndex, buffer_pool_manager);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyFirstFrom(
     const MappingType &item, int parentIndex,
-    BufferPoolManager *buffer_pool_manager) {}
+    BufferPoolManager *buffer_pool_manager) {
+    std::copy_backward(array, array + GetSize(), array + GetSize() + 1);
+    array[0].first = item.first;
+    array[0].second = item.second;
+    IncreaseSize(1);
+    B_PLUS_TREE_INTERNAL_PAGE *parent = reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE *>(buffer_pool_manager->FetchPage(GetParentPageId())->GetData());
+    parent->SetKeyAt(parentIndex - 1, array[0].first);
+    buffer_pool_manager->UnpinPage(parent->GetPageId(), true);
+}
 
 /*****************************************************************************
  * DEBUG
